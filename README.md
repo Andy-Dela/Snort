@@ -1,42 +1,142 @@
-# Snort
-This snort project demonstrates Active Response and IPS (Intrusion Prevention System) configuration.
+# Snort — Intrusion Detection & Prevention
 
-<h2>Project Overview</h2>
-<p>In this incident response scenario, I acted as a Security Engineer for "J&Y Enterprise" to defend a high-value asset against an active Brute-Force attack. Using Snort, I transitioned from passive network sniffing to active intrusion prevention. I identified the attack vector, analyzed the malicious traffic patterns, and authored a custom IPS rule to drop the unauthorized traffic in real-time.</p> </br>
+**Analyst:** Andy Dela Quarshie Wright  
+**Role:** SOC Level 1 Analyst  
+**Tool:** Snort 2.9.7.0  
+**Environment:** TryHackMe — Ubuntu (ip-10-49-188-87)  
 
-<h2>Technical Skills Demonstrated</h2>
-<p>
-<b>IPS Rule Authoring:</b> Writing custom Snort signatures using correct syntax (Action, Protocol, Source/Dest, Options).
+---
 
-<b>Traffic Analysis:</b> Analyzing packet payloads and link-layer data using Snort's sniffer mode (-dev flags).
+## Overview
 
-<b>Service Identification:</b> Identifying targeted ports (Port 22/SSH) through log correlation.
+Hands-on Snort lab covering three core use cases — packet sniffing, packet logging, and writing and deploying custom IDS/IPS rules. Demonstrates the ability to configure Snort as a network-based intrusion detection and prevention system, write detection rules, and apply them to live network traffic.
 
-<b>Linux Security Administration:</b> Operating Snort with elevated privileges and managing log directories.
+---
 
- </p> </br>
+## Skills Demonstrated
 
-<h2>Investigation Walktrough</h2>
-<p>
-  <h3>Identifying the Attack Source</h3>
-  
-I initiated Snort in sniffer and packet logger mode to capture the live attack traffic.
+- Snort sniffer mode — live packet capture and display
+- Snort packet logging mode — capturing traffic to disk
+- Writing custom Snort rules — drop, alert, msg, sid, rev
+- Deploying rules in IPS mode using afpacket DAQ
+- Understanding Snort rule syntax and structure
+- Network traffic analysis from Snort output
 
-<img src="https://i.imgur.com/K71ClSM.png" height="80%" width="80%" alt="Investigation Walkthrough"/>
+---
 
-Observation: The console showed a high volume of traffic targeting a specific port.
+## Task 1 — Sniffer Mode
 
-Findings: By filtering the logs for "22", I identified multiple failed SSH connection attempts.
+**Objective:** Run Snort in sniffer mode to capture and display live network traffic.
 
-<img src="https://i.imgur.com/OsMp31y.png" height="80%" width="80%" alt="Investigation Walkthrough"/>
+**Command:**
+```bash
+sudo snort -dev -l .
+```
 
-<h3>Crafting the IPS Rule</h3>
+**Flags:**
+- `-d` — display application layer data
+- `-e` — display link layer headers
+- `-v` — verbose mode
+- `-l .` — log to current directory
 
-Once the service (SSH) and attacker IP were confirmed, I formulated a Snort rule to block the traffic.
+**Output:** Snort initialised on eth0 in passive mode, capturing Ethernet traffic. Packet processing started with PID 1947.
 
-The Logic: The rule was designed to "drop" any TCP traffic from the attacker's IP to the server's SSH port.
+![Snort sniffer mode](screenshots/01_snort_sniffer_mode.png)
 
-<img src="https://i.imgur.com/DlxLvri.png" height="80%" width="80%" alt="Investigation Walkthrough"/>
+---
 
-<img src="https://i.imgur.com/ZaiIDJ5.png" height="80%" width="80%" alt="Investigation Walkthrough"/>
+## Task 2 — Packet Logging
 
+**Objective:** Capture live TCP traffic and review packet details in Snort output.
+
+**Traffic captured between:**
+- 10.10.140.29:22 (SSH server)
+- 10.10.245.36:46660 (client)
+
+**Key packet details observed:**
+```
+01/14-14:44:34.252285 10.10.140.29:22 -> 10.10.245.36:46660
+TCP TTL:64 TOS:0x0 ID:26651 IpLen:20 DgmLen:1108 DF
+***AP*** Seq: 0xB2DC6033 Ack: 0x2AC276B7 Win: 0x1E3 TcpLen: 32
+```
+
+Bidirectional TCP traffic on port 22 — consistent with an active SSH session. Packet flags (AP = ACK + PSH) confirm data transfer in progress.
+
+![Packet capture output](screenshots/02_packet_capture_output.png)
+
+---
+
+## Task 3 — Write Custom Snort Rule
+
+**Objective:** Write a rule to block all TCP traffic on port 22 (SSH).
+
+**Rule file created:**
+```bash
+touch local.rules
+nano local.rules
+```
+
+**Rule written:**
+```
+drop tcp any 22 <> any any (msg:"block access"; sid: 100001; rev:1;)
+```
+
+**Rule breakdown:**
+| Field | Value | Meaning |
+|-------|-------|---------|
+| Action | drop | Block and log the packet |
+| Protocol | tcp | TCP traffic only |
+| Source | any 22 | Any IP on port 22 |
+| Direction | <> | Bidirectional |
+| Destination | any any | Any IP any port |
+| msg | "block access" | Alert message in logs |
+| sid | 100001 | Unique rule ID |
+| rev | 1 | Rule revision number |
+
+![Custom rule in local.rules](screenshots/03_custom_rule_local_rules.png)
+
+---
+
+## Task 4 — Deploy Rule in IPS Mode
+
+**Objective:** Apply the custom rule to live traffic using Snort in inline IPS mode.
+
+**Command:**
+```bash
+sudo snort -c local.rules -q -Q --daq afpacket -i eth0:eth1 -A full
+```
+
+**Flags:**
+- `-c local.rules` — use custom rules file
+- `-q` — quiet mode (suppress banner)
+- `-Q` — inline IPS mode
+- `--daq afpacket` — use afpacket DAQ for inline operation
+- `-i eth0:eth1` — bridge interfaces eth0 and eth1
+- `-A full` — full alert output
+
+![Rule deployed in IPS mode](screenshots/04_snort_rule_deployed.png)
+
+---
+
+## Snort Rule Reference
+
+See [rules/local.rules](rules/local.rules) for all rules written in this lab.
+
+---
+
+## MITRE ATT&CK Relevance
+
+| Technique | ID | How Snort Detects It |
+|-----------|-----|---------------------|
+| Exploitation of Remote Services | T1210 | Custom rules on suspicious ports |
+| Network Scanning | T1046 | Alert rules on high connection volumes |
+| Command and Control | T1071 | Rules matching C2 traffic patterns |
+| Lateral Movement via SSH | T1021.004 | Drop rule on port 22 |
+
+---
+
+## Certifications
+
+- CompTIA Security+
+- TryHackMe SOC Level 1
+- Google Cybersecurity Professional Certificate
